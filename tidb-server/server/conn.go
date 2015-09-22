@@ -204,12 +204,9 @@ func (cc *clientConn) readHandshakeResponse() error {
 			// May be ipv6 address like [::1]:48735
 			addr = addr[1 : len(addr)-1]
 		}
-
-		strs := strings.Split(addr, ":")
-		host := strs[0]
-		user := fmt.Sprintf("%s@%s", cc.user, host)
+		user := fmt.Sprintf("%s@%s", cc.user, addr)
 		if !cc.ctx.Auth(user, auth, cc.salt) {
-			return errors.Trace(mysql.NewDefaultError(mysql.ErAccessDeniedError, cc.user, host, "Yes"))
+			return errors.Trace(mysql.NewDefaultError(mysql.ErAccessDeniedError, cc.user, addr, "Yes"))
 		}
 	}
 	return nil
