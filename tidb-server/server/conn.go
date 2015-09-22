@@ -196,6 +196,7 @@ func (cc *clientConn) readHandshakeResponse() error {
 	if !cc.server.skipAuth() {
 		// Do Auth
 		addr := cc.conn.RemoteAddr().String()
+		log.Debugf("RemoteAddr: %v", addr)
 		strs := strings.Split(addr, ":")
 		host := strs[0]
 		user := fmt.Sprintf("%s@%s", cc.user, host)
