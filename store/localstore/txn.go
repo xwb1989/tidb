@@ -227,6 +227,8 @@ func (txn *dbTxn) doCommit() error {
 	}
 	// Update commit version.
 	txn.version = curVer
+	// Release read lock before write. For boltdb.
+	txn.Snapshot.Release()
 	return txn.store.writeBatch(b)
 }
 

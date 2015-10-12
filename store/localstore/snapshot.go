@@ -32,7 +32,25 @@ var (
 
 type dbSnapshot struct {
 	db      engine.DB
+	rawIt   engine.Iterator
 	version kv.Version // transaction begin version
+}
+
+func (s *dbSnapshot) seek(startKey []byte) (engine.Iterator, error) {
+	if s.rawIt == nil {
+		var err error
+		s.rawIt, err = s.db.Seek([]byte{0})
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	}
+	ok := s.rawIt.Seek(startKey)
+	if !ok {
+		s.rawIt.Release()
+		s.rawIt = nil
+		return nil, kv.ErrNotExist
+	}
+	return s.rawIt, nil
 }
 
 func (s *dbSnapshot) MvccGet(k kv.Key, ver kv.Version) ([]byte, error) {
@@ -53,32 +71,28 @@ func (s *dbSnapshot) MvccGet(k kv.Key, ver kv.Version) ([]byte, error) {
 	startKey := MvccEncodeVersionKey(k, ver)
 	endKey := MvccEncodeVersionKey(k, kv.MinVersion)
 
-	// get raw iterator
-	it, err := s.db.Seek(startKey)
+	it, err := s.seek(startKey)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	defer it.Release()
 
 	var rawKey []byte
 	var v []byte
-	if it.Next() {
-		// If scan exceed this key's all versions
-		// it.Key() > endKey.
-		if kv.EncodedKey(it.Key()).Cmp(endKey) < 0 {
-			// Check newest version of this key.
-			// If it's tombstone, just skip it.
-			if !isTombstone(it.Value()) {
-				rawKey = it.Key()
-				v = it.Value()
-			}
+	// If scan exceed this key's all versions
+	// it.Key() > endKey.
+	if kv.EncodedKey(it.Key()).Cmp(endKey) < 0 {
+		// Check newest version of this key.
+		// If it's tombstone, just skip it.
+		if !isTombstone(it.Value()) {
+			rawKey = it.Key()
+			v = it.Value()
 		}
 	}
 	// No such key (or it's tombstone).
 	if rawKey == nil {
 		return nil, kv.ErrNotExist
 	}
-	return v, nil
+	return append([]byte(nil), v...), nil
 }
 
 func (s *dbSnapshot) NewMvccIterator(k kv.Key, ver kv.Version) kv.Iterator {
@@ -103,7 +117,12 @@ func (s *dbSnapshot) MvccRelease() {
 	s.Release()
 }
 
-func (s *dbSnapshot) Release() {}
+func (s *dbSnapshot) Release() {
+	if s.rawIt != nil {
+		s.rawIt.Release()
+		s.rawIt = nil
+	}
+}
 
 type dbIter struct {
 	s               *dbSnapshot
@@ -132,13 +151,11 @@ func (it *dbIter) Next(fn kv.FnKeyCmp) (kv.Iterator, error) {
 	var retErr error
 	var engineIter engine.Iterator
 	for {
-		engineIter, retErr = it.s.db.Seek(encKey)
-		if retErr != nil {
-			return nil, errors.Trace(retErr)
-		}
-		// Check if overflow
-		if !engineIter.Next() {
+		var err error
+		engineIter, err = it.s.seek(encKey)
+		if err != nil {
 			it.valid = false
+			retErr = err
 			break
 		}
 
@@ -164,17 +181,14 @@ func (it *dbIter) Next(fn kv.FnKeyCmp) (kv.Iterator, error) {
 			break
 		}
 		if val != nil {
-			it.k = key
-			it.v = val
+			it.k = append([]byte(nil), key...)
+			it.v = append([]byte(nil), val...)
 			it.startKey = key.Next()
 			break
 		}
-		// Release the iterator, and update key
-		engineIter.Release()
 		// Current key's all versions are deleted, just go next key.
 		encKey = codec.EncodeBytes(nil, key.Next())
 	}
-	engineIter.Release()
 	return it, errors.Trace(retErr)
 }
 
