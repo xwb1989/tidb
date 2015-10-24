@@ -56,8 +56,16 @@ type btreeIter struct {
 }
 
 func (b *btreeBuffer) NewIterator(param interface{}) Iterator {
-	k := toItfc(param.([]byte))
-	iter, ok := b.tree.Seek(k)
+	var iter *memkv.Enumerator
+	var ok bool
+	if param == nil {
+		it, err := b.tree.SeekFirst()
+		iter = it
+		ok = err == nil
+	} else {
+		k := toItfc(param.([]byte))
+		iter, ok = b.tree.Seek(k)
+	}
 	return &btreeIter{e: iter, ok: ok}
 }
 
@@ -80,7 +88,7 @@ func (i *btreeIter) Value() []byte {
 func (i *btreeIter) Next() (Iterator, error) {
 	k, v, err := i.e.Next()
 	i.k, i.v, i.ok = string(fromItfc(k)), fromItfc(v), err == nil
-	return i, nil
+	return i, err
 }
 
 // Valid implements Iterator Valid
@@ -92,5 +100,8 @@ func toItfc(v []byte) []interface{} {
 	return []interface{}{v}
 }
 func fromItfc(v []interface{}) []byte {
+	if v == nil {
+		return nil
+	}
 	return v[0].([]byte)
 }
