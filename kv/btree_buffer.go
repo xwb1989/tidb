@@ -16,6 +16,8 @@
 package kv
 
 import (
+	"bytes"
+
 	"github.com/pingcap/tidb/kv/memkv"
 	"github.com/pingcap/tidb/util/types"
 )
@@ -58,14 +60,27 @@ type btreeIter struct {
 func (b *btreeBuffer) NewIterator(param interface{}) Iterator {
 	var iter *memkv.Enumerator
 	var ok bool
+	var err error
 	if param == nil {
-		it, err := b.tree.SeekFirst()
-		iter = it
+		iter, err = b.tree.SeekFirst()
 		ok = err == nil
 	} else {
-		k := toItfc(param.([]byte))
-		iter, ok = b.tree.Seek(k)
+		k := param.([]byte)
+		first, _ := b.tree.First()
+		// special case: if the key is smaller than the first element, we just SeekFirst
+		if bytes.Compare(k, fromItfc(first)) <= 0 {
+			iter, err = b.tree.SeekFirst()
+			ok = err == nil
+		} else {
+			iter, ok = b.tree.Seek(toItfc(k))
+		}
 	}
+	if ok {
+		// the initial push...
+		k, v, err := iter.Next()
+		return &btreeIter{e: iter, k: string(fromItfc(k)), v: fromItfc(v), ok: ok && err == nil}
+	}
+	// something is wrong
 	return &btreeIter{e: iter, ok: ok}
 }
 
