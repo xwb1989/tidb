@@ -135,6 +135,9 @@ func (s *testKVSuite) TestGetSet(c *C) {
 func (s *testKVSuite) TestNewIterator(c *C) {
 	buffer := s.b
 	defer buffer.Release()
+	// should be invalid
+	iter := buffer.NewIterator(nil)
+	c.Assert(iter.Valid(), IsFalse)
 
 	insertData(c, buffer)
 	checkNewIterator(c, buffer)
