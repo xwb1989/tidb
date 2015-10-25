@@ -33,15 +33,19 @@ func TestT(t *testing.T) {
 var _ = Suite(&testKVSuite{})
 
 type testKVSuite struct {
-	b MemBuffer
+	bs []MemBuffer
 }
 
 func (s *testKVSuite) SetUpSuite(c *C) {
-	s.b = NewBTreeBuffer(true)
+	s.bs = make([]MemBuffer, 2)
+	s.bs[0] = NewBTreeBuffer()
+	s.bs[1] = NewMemDbBuffer()
 }
 
 func (s *testKVSuite) TearDownSuite(c *C) {
-	s.b.Release()
+	for _, buffer := range s.bs {
+		buffer.Release()
+	}
 }
 
 func insertData(c *C, buffer MemBuffer) {
@@ -126,28 +130,31 @@ func mustGet(c *C, buffer MemBuffer) {
 }
 
 func (s *testKVSuite) TestGetSet(c *C) {
-	buffer := s.b
-	insertData(c, buffer)
-	mustGet(c, buffer)
-	buffer.Release()
+	for _, buffer := range s.bs {
+		insertData(c, buffer)
+		mustGet(c, buffer)
+		buffer.Release()
+	}
 }
 
 func (s *testKVSuite) TestNewIterator(c *C) {
-	buffer := s.b
-	defer buffer.Release()
-	// should be invalid
-	iter := buffer.NewIterator(nil)
-	c.Assert(iter.Valid(), IsFalse)
+	for _, buffer := range s.bs {
+		// should be invalid
+		iter := buffer.NewIterator(nil)
+		c.Assert(iter.Valid(), IsFalse)
 
-	insertData(c, buffer)
-	checkNewIterator(c, buffer)
+		insertData(c, buffer)
+		checkNewIterator(c, buffer)
+		buffer.Release()
+	}
 }
 
 func (s *testKVSuite) TestBasicNewIterator(c *C) {
-	buffer := s.b
-	defer buffer.Release()
-	it := buffer.NewIterator([]byte("2"))
-	c.Assert(it.Valid(), Equals, false)
+	for _, buffer := range s.bs {
+		it := buffer.NewIterator([]byte("2"))
+		c.Assert(it.Valid(), Equals, false)
+		buffer.Release()
+	}
 }
 
 func (s *testKVSuite) TestNewIteratorMin(c *C) {
@@ -162,20 +169,22 @@ func (s *testKVSuite) TestNewIteratorMin(c *C) {
 		{"DATA_test_main_db_tbl_tbl_test_record__00000000000000000002_0002", "2"},
 		{"DATA_test_main_db_tbl_tbl_test_record__00000000000000000002_0003", "hello"},
 	}
+	for _, buffer := range s.bs {
+		for _, kv := range kvs {
+			buffer.Set([]byte(kv.key), []byte(kv.value))
+		}
 
-	buffer := s.b
-	for _, kv := range kvs {
-		buffer.Set([]byte(kv.key), []byte(kv.value))
+		it := buffer.NewIterator(nil)
+		for it.Valid() {
+			fmt.Printf("%s, %s\n", it.Key(), it.Value())
+			it, _ = it.Next()
+		}
+
+		it = buffer.NewIterator([]byte("DATA_test_main_db_tbl_tbl_test_record__00000000000000000000"))
+		c.Assert(string(it.Key()), Equals, "DATA_test_main_db_tbl_tbl_test_record__00000000000000000001")
+
+		buffer.Release()
+
 	}
 
-	it := buffer.NewIterator(nil)
-	for it.Valid() {
-		fmt.Printf("%s, %s\n", it.Key(), it.Value())
-		it, _ = it.Next()
-	}
-
-	it = buffer.NewIterator([]byte("DATA_test_main_db_tbl_tbl_test_record__00000000000000000000"))
-	c.Assert(string(it.Key()), Equals, "DATA_test_main_db_tbl_tbl_test_record__00000000000000000001")
-
-	buffer.Release()
 }
