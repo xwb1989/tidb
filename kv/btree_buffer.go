@@ -17,7 +17,10 @@ package kv
 
 import (
 	"bytes"
+	"runtime/debug"
 
+	"github.com/juju/errors"
+	"github.com/ngaut/log"
 	"github.com/pingcap/tidb/kv/memkv"
 	"github.com/pingcap/tidb/util/types"
 )
@@ -35,14 +38,31 @@ func NewBTreeBuffer(asc bool) MemBuffer {
 
 func (b *btreeBuffer) Get(k Key) ([]byte, error) {
 	v, ok := b.tree.Get(toItfc(k))
-	if !ok {
+	val := fromItfc(v)
+
+	if !ok || len(val) == 0 {
 		return nil, ErrNotExist
 	}
-	return fromItfc(v), nil
+	return val, nil
 }
 
 func (b *btreeBuffer) Set(k []byte, v []byte) error {
+	if len(v) == 0 {
+		// Incase someone use it in the wrong way, we can figure it out immediately.
+		debug.PrintStack()
+		return errors.New("cannot set nil")
+	}
 	b.tree.Set(toItfc(k), toItfc(v))
+	return nil
+}
+
+func (b *btreeBuffer) Delete(k []byte) error {
+	key := toItfc(k)
+	v, ok := b.tree.Get(key)
+	if ok && len(fromItfc(v)) == 0 {
+		return ErrNotExist
+	}
+	b.tree.Set(key, nil)
 	return nil
 }
 
@@ -67,18 +87,35 @@ func (b *btreeBuffer) NewIterator(param interface{}) Iterator {
 	} else {
 		k := param.([]byte)
 		first, _ := b.tree.First()
+		last, _ := b.tree.Last()
 		// special case: if the key is smaller than the first element, we just SeekFirst
-		if bytes.Compare(k, fromItfc(first)) <= 0 {
+		switch {
+		case bytes.Compare(k, fromItfc(first)) <= 0:
+			// seek before first key
 			iter, err = b.tree.SeekFirst()
 			ok = err == nil
-		} else {
-			iter, ok = b.tree.Seek(toItfc(k))
+		case bytes.Compare(k, fromItfc(last)) > 0:
+			// seek beyond last key, error
+			ok = false
+		default:
+			// seek within range
+			log.Debugf("key: %s\n", string(k))
+			key := toItfc(k)
+			_, ok = b.tree.Get(key)
+			if !ok {
+				log.Debugf("key: inserting %s\n", string(k))
+				b.tree.Set(key, nil)
+				iter, ok = b.tree.Seek(key)
+				iter.Next()
+			} else {
+				iter, ok = b.tree.Seek(key)
+			}
 		}
 	}
 	if ok {
 		// the initial push...
-		k, v, err := iter.Next()
-		return &btreeIter{e: iter, k: string(fromItfc(k)), v: fromItfc(v), ok: ok && err == nil}
+		_, _, err := iter.Next()
+		return &btreeIter{e: iter, ok: ok && err == nil}
 	}
 	// something is wrong
 	return &btreeIter{e: iter, ok: ok}

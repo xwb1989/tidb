@@ -55,7 +55,7 @@ func IsErrNotFound(err error) bool {
 // MemBuffer is the interface for transaction buffer of update in a transaction
 type MemBuffer interface {
 	Snapshot
-	Put([]byte, []byte) error
+	Set([]byte, []byte) error
 	Delete([]byte) error
 }
 
