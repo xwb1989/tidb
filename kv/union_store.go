@@ -54,7 +54,10 @@ func IsErrNotFound(err error) bool {
 
 // MemBuffer is the interface for transaction buffer of update in a transaction
 type MemBuffer interface {
+	// shares the same interface as the read-only snapshot
+	// and it implies that MemBuffer's iterator should iterate its kv pairs in the same order as snapshot
 	Snapshot
+	// Set associates key with value
 	Set([]byte, []byte) error
 }
 

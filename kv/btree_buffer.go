@@ -31,6 +31,7 @@ func NewBTreeBuffer(asc bool) MemBuffer {
 	}
 }
 
+// Get returns the value associated with the key; ErrNotExist error if the key does not exist
 func (b *btreeBuffer) Get(k Key) ([]byte, error) {
 	v, ok := b.tree.Get(toItfc(k))
 	if !ok {
@@ -39,11 +40,13 @@ func (b *btreeBuffer) Get(k Key) ([]byte, error) {
 	return fromItfc(v), nil
 }
 
+// Set associates the key with the value
 func (b *btreeBuffer) Set(k []byte, v []byte) error {
 	b.tree.Set(toItfc(k), toItfc(v))
 	return nil
 }
 
+// Release clear the whole buffer
 func (b *btreeBuffer) Release() {
 	b.tree.Clear()
 }
