@@ -15,7 +15,6 @@ package kv
 
 import (
 	"fmt"
-	"strconv"
 	"testing"
 
 	. "github.com/pingcap/check"
@@ -49,14 +48,6 @@ func insertData(c *C, buffer MemBuffer) {
 	for i := startIndex; i < testCount; i++ {
 		val := encodeInt(i * indexStep)
 		err := buffer.Set(val, val)
-		c.Assert(err, IsNil)
-	}
-}
-
-func mustDel(c *C, buffer MemBuffer) {
-	for i := startIndex; i < testCount; i++ {
-		val := encodeInt(i * indexStep)
-		err := buffer.Delete(val)
 		c.Assert(err, IsNil)
 	}
 }
@@ -136,150 +127,26 @@ func mustGet(c *C, buffer MemBuffer) {
 
 func (s *testKVSuite) TestGetSet(c *C) {
 	buffer := s.b
-
 	insertData(c, buffer)
-
 	mustGet(c, buffer)
-
-	// Check transaction results
 	buffer.Release()
-
-	buffer = s.b
-	defer buffer.Release()
-
-	mustGet(c, buffer)
-	mustDel(c, buffer)
 }
 
 func (s *testKVSuite) TestNewIterator(c *C) {
 	buffer := s.b
-
-	insertData(c, buffer)
-	checkNewIterator(c, buffer)
-
-	// Check transaction results
-	buffer.Release()
-
-	buffer = s.b
 	defer buffer.Release()
 
+	insertData(c, buffer)
 	checkNewIterator(c, buffer)
-	mustDel(c, buffer)
-}
-
-func (s *testKVSuite) TestDelete(c *C) {
-	buffer := s.b
-
-	insertData(c, buffer)
-
-	mustDel(c, buffer)
-
-	mustNotGet(c, buffer)
-	buffer.Release()
-
-	// Try get
-	buffer = s.b
-
-	mustNotGet(c, buffer)
-
-	// Insert again
-	insertData(c, buffer)
-	buffer.Release()
-
-	// Delete all
-	buffer = s.b
-
-	mustDel(c, buffer)
-	buffer.Release()
-
-	buffer = s.b
-
-	mustNotGet(c, buffer)
-	buffer.Release()
-}
-
-func (s *testKVSuite) TestDelete2(c *C) {
-	buffer := s.b
-	val := []byte("test")
-	buffer.Set([]byte("DATA_test_tbl_department_record__0000000001_0003"), val)
-	buffer.Set([]byte("DATA_test_tbl_department_record__0000000001_0004"), val)
-	buffer.Set([]byte("DATA_test_tbl_department_record__0000000002_0003"), val)
-	buffer.Set([]byte("DATA_test_tbl_department_record__0000000002_0004"), val)
-	buffer.Release()
-
-	// Delete all
-	buffer = s.b
-
-	it := buffer.NewIterator([]byte("DATA_test_tbl_department_record__0000000001_0003"))
-	for it.Valid() {
-		err := buffer.Delete([]byte(it.Key()))
-		c.Assert(err, IsNil)
-		it, err = it.Next()
-		c.Assert(err, IsNil)
-	}
-	buffer.Release()
-
-	buffer = s.b
-	it = buffer.NewIterator([]byte("DATA_test_tbl_department_record__000000000"))
-	c.Assert(it.Valid(), IsFalse)
-	buffer.Release()
-
 }
 
 func (s *testKVSuite) TestBasicNewIterator(c *C) {
 	buffer := s.b
-	buffer.Set([]byte("1"), []byte("1"))
-	buffer.Release()
-	buffer = s.b
 	defer buffer.Release()
-
 	it := buffer.NewIterator([]byte("2"))
 	c.Assert(it.Valid(), Equals, false)
-	buffer.Delete([]byte("1"))
 }
 
-func (s *testKVSuite) TestBasicTable(c *C) {
-	buffer := s.b
-	for i := 1; i < 5; i++ {
-		b := []byte(strconv.Itoa(i))
-		buffer.Set(b, b)
-	}
-	buffer.Release()
-	buffer = s.b
-	defer buffer.Release()
-
-	err := buffer.Set([]byte("1"), []byte("1"))
-	c.Assert(err, IsNil)
-
-	it := buffer.NewIterator([]byte("0"))
-	c.Assert(it.Key(), Equals, "1")
-
-	err = buffer.Set([]byte("0"), []byte("0"))
-	c.Assert(err, IsNil)
-	it = buffer.NewIterator([]byte("0"))
-	c.Assert(it.Key(), Equals, "0")
-	err = buffer.Delete([]byte("0"))
-	c.Assert(err, IsNil)
-
-	buffer.Delete([]byte("1"))
-	it = buffer.NewIterator([]byte("0"))
-	c.Assert(it.Key(), Equals, "2")
-
-	err = buffer.Delete([]byte("3"))
-	c.Assert(err, IsNil)
-	it = buffer.NewIterator([]byte("2"))
-	c.Assert(it.Key(), Equals, "2")
-
-	it = buffer.NewIterator([]byte("3"))
-	c.Assert(it.Key(), Equals, "4")
-	err = buffer.Delete([]byte("2"))
-	c.Assert(err, IsNil)
-	err = buffer.Delete([]byte("4"))
-	c.Assert(err, IsNil)
-	// Test delete a key which not exist
-	err = buffer.Delete([]byte("5"))
-	c.Assert(err, NotNil)
-}
 func (s *testKVSuite) TestNewIteratorMin(c *C) {
 	kvs := []struct {
 		key   string

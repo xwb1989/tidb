@@ -56,7 +56,6 @@ func IsErrNotFound(err error) bool {
 type MemBuffer interface {
 	Snapshot
 	Set([]byte, []byte) error
-	Delete([]byte) error
 }
 
 // UnionStore is an implement of Store which contains a buffer for update.

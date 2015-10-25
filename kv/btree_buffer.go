@@ -17,9 +17,7 @@ package kv
 
 import (
 	"bytes"
-	"runtime/debug"
 
-	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb/kv/memkv"
 	"github.com/pingcap/tidb/util/types"
@@ -38,31 +36,20 @@ func NewBTreeBuffer(asc bool) MemBuffer {
 
 func (b *btreeBuffer) Get(k Key) ([]byte, error) {
 	v, ok := b.tree.Get(toItfc(k))
-	val := fromItfc(v)
-
-	if !ok || len(val) == 0 {
+	if !ok {
 		return nil, ErrNotExist
 	}
-	return val, nil
+	return fromItfc(v), nil
 }
 
 func (b *btreeBuffer) Set(k []byte, v []byte) error {
 	if len(v) == 0 {
-		// Incase someone use it in the wrong way, we can figure it out immediately.
-		debug.PrintStack()
-		return errors.New("cannot set nil")
+		if val, ok := b.tree.Get(toItfc(k)); ok && len(fromItfc(val)) == 0 {
+			// delete a deleted key
+			return ErrNotExist
+		}
 	}
 	b.tree.Set(toItfc(k), toItfc(v))
-	return nil
-}
-
-func (b *btreeBuffer) Delete(k []byte) error {
-	key := toItfc(k)
-	v, ok := b.tree.Get(key)
-	if ok && len(fromItfc(v)) == 0 {
-		return ErrNotExist
-	}
-	b.tree.Set(key, nil)
 	return nil
 }
 
@@ -78,11 +65,11 @@ type btreeIter struct {
 }
 
 func (b *btreeBuffer) NewIterator(param interface{}) Iterator {
-	var iter *memkv.Enumerator
+	var e *memkv.Enumerator
 	var ok bool
 	var err error
 	if param == nil {
-		iter, err = b.tree.SeekFirst()
+		e, err = b.tree.SeekFirst()
 		ok = err == nil
 	} else {
 		k := param.([]byte)
@@ -92,7 +79,7 @@ func (b *btreeBuffer) NewIterator(param interface{}) Iterator {
 		switch {
 		case bytes.Compare(k, fromItfc(first)) <= 0:
 			// seek before first key
-			iter, err = b.tree.SeekFirst()
+			e, err = b.tree.SeekFirst()
 			ok = err == nil
 		case bytes.Compare(k, fromItfc(last)) > 0:
 			// seek beyond last key, error
@@ -101,24 +88,17 @@ func (b *btreeBuffer) NewIterator(param interface{}) Iterator {
 			// seek within range
 			log.Debugf("key: %s\n", string(k))
 			key := toItfc(k)
-			_, ok = b.tree.Get(key)
-			if !ok {
-				log.Debugf("key: inserting %s\n", string(k))
-				b.tree.Set(key, nil)
-				iter, ok = b.tree.Seek(key)
-				iter.Next()
-			} else {
-				iter, ok = b.tree.Seek(key)
-			}
+			e, ok = b.tree.Seek(key)
 		}
 	}
 	if ok {
+		iter := &btreeIter{e: e, ok: ok}
 		// the initial push...
-		_, _, err := iter.Next()
-		return &btreeIter{e: iter, ok: ok && err == nil}
+		iter.Next()
+		return iter
 	}
 	// something is wrong
-	return &btreeIter{e: iter, ok: ok}
+	return &btreeIter{e: e, ok: ok}
 }
 
 // Close implements Iterator Close
@@ -139,6 +119,10 @@ func (i *btreeIter) Value() []byte {
 // Next implements Iterator Next
 func (i *btreeIter) Next() (Iterator, error) {
 	k, v, err := i.e.Next()
+	// find the first non-nil key
+	for err == nil && len(fromItfc(k)) == 0 {
+		k, v, err = i.e.Next()
+	}
 	i.k, i.v, i.ok = string(fromItfc(k)), fromItfc(v), err == nil
 	return i, err
 }
