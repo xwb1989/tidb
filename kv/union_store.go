@@ -55,7 +55,8 @@ func IsErrNotFound(err error) bool {
 // MemBuffer is the interface for transaction buffer of update in a transaction
 type MemBuffer interface {
 	Snapshot
-	Set([]byte, []byte) error
+	Put([]byte, []byte) error
+	Delete([]byte) error
 }
 
 // UnionStore is an implement of Store which contains a buffer for update.
