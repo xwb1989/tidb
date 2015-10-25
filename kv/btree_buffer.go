@@ -25,9 +25,9 @@ type btreeBuffer struct {
 }
 
 // NewBTreeBuffer returns a breeBuffer
-func NewBTreeBuffer(asc bool) MemBuffer {
+func NewBTreeBuffer() MemBuffer {
 	return &btreeBuffer{
-		tree: memkv.NewTree(types.Collators[asc]),
+		tree: memkv.NewTree(types.Collators[true]),
 	}
 }
 
