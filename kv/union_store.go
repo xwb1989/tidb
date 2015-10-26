@@ -33,7 +33,7 @@ const (
 
 var (
 	p = pool.NewCache("memdb pool", 100, func() interface{} {
-		return NewBTreeBuffer()
+		return NewMemDbBuffer()
 	})
 )
 
