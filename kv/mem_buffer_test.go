@@ -15,6 +15,7 @@ package kv
 
 import (
 	"fmt"
+	"math/rand"
 	"testing"
 
 	. "github.com/pingcap/check"
@@ -186,5 +187,100 @@ func (s *testKVSuite) TestNewIteratorMin(c *C) {
 		buffer.Release()
 
 	}
+}
 
+var opCnt = 100000
+
+func BenchmarkBTreeBufferSequential(b *testing.B) {
+	data := make([][]byte, opCnt)
+	for i := 0; i < opCnt; i++ {
+		data[i] = encodeInt(i)
+	}
+	buffer := NewBTreeBuffer()
+	benchmarkSetGet(b, buffer, data)
+	buffer.Release()
+	b.ReportAllocs()
+}
+
+func BenchmarkBTreeBufferRandom(b *testing.B) {
+	data := make([][]byte, opCnt)
+	for i := 0; i < opCnt; i++ {
+		data[i] = encodeInt(i)
+	}
+	shuffle(data)
+	buffer := NewBTreeBuffer()
+	benchmarkSetGet(b, buffer, data)
+	buffer.Release()
+	b.ReportAllocs()
+}
+
+func BenchmarkMemDbBufferSequential(b *testing.B) {
+	data := make([][]byte, opCnt)
+	for i := 0; i < opCnt; i++ {
+		data[i] = encodeInt(i)
+	}
+	buffer := NewMemDbBuffer()
+	benchmarkSetGet(b, buffer, data)
+	buffer.Release()
+	b.ReportAllocs()
+}
+
+func BenchmarkMemDbBufferRandom(b *testing.B) {
+	data := make([][]byte, opCnt)
+	for i := 0; i < opCnt; i++ {
+		data[i] = encodeInt(i)
+	}
+	shuffle(data)
+	buffer := NewMemDbBuffer()
+	benchmarkSetGet(b, buffer, data)
+	buffer.Release()
+	b.ReportAllocs()
+}
+
+func BenchmarkBTreeIter(b *testing.B) {
+	buffer := NewBTreeBuffer()
+	benchIterator(b, buffer)
+	buffer.Release()
+	b.ReportAllocs()
+}
+
+func BenchmarkMemDbIter(b *testing.B) {
+	buffer := NewMemDbBuffer()
+	benchIterator(b, buffer)
+	buffer.Release()
+	b.ReportAllocs()
+}
+
+func shuffle(slc [][]byte) {
+	N := len(slc)
+	for i := 0; i < N; i++ {
+		// choose index uniformly in [i, N-1]
+		r := i + rand.Intn(N-i)
+		slc[r], slc[i] = slc[i], slc[r]
+	}
+}
+func benchmarkSetGet(b *testing.B, buffer MemBuffer, data [][]byte) {
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for _, k := range data {
+			buffer.Set(k, k)
+		}
+		for _, k := range data {
+			buffer.Get(k)
+		}
+	}
+}
+
+func benchIterator(b *testing.B, buffer MemBuffer) {
+	for k := 0; k < opCnt; k++ {
+		buffer.Set(encodeInt(k), encodeInt(k))
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		iter := buffer.NewIterator(nil)
+		for iter.Valid() {
+			iter.Next()
+		}
+		iter.Close()
+	}
 }
