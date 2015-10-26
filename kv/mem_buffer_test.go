@@ -253,6 +253,22 @@ func BenchmarkMemDbIter(b *testing.B) {
 	b.ReportAllocs()
 }
 
+func BenchmarkBTreeCreation(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		buffer := NewBTreeBuffer()
+		buffer.Release()
+	}
+	b.ReportAllocs()
+}
+
+func BenchmarkMemDbCreation(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		buffer := NewMemDbBuffer()
+		buffer.Release()
+	}
+	b.ReportAllocs()
+}
+
 func shuffle(slc [][]byte) {
 	N := len(slc)
 	for i := 0; i < N; i++ {
