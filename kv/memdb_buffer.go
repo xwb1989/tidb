@@ -9,12 +9,10 @@ import (
 	"github.com/syndtr/goleveldb/leveldb/util"
 )
 
-// memDbBuffer implements MemBuffer interface, using memdb as storage engine
 type memDbBuffer struct {
 	db *memdb.DB
 }
 
-// MemDbIter abc
 type memDbIter struct {
 	iter iterator.Iterator
 }
